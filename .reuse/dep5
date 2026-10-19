@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: plugin-template
-Upstream-Contact: The plugin-template Authors <https://github.com/SemRels/plugin-template>
-Source: https://github.com/SemRels/plugin-template
+Upstream-Name: updater-replace
+Upstream-Contact: The updater-replace Authors <https://github.com/SemRels/updater-replace>
+Source: https://github.com/SemRels/updater-replace
 
 # ----------------------------------------------------------------------------
 # Documentation and community health files
@@ -9,6 +9,11 @@ Source: https://github.com/SemRels/plugin-template
 Files: *.md
  .github/**/*.md
 Copyright: 2026 The plugin-template Authors
+License: Apache-2.0
+
+# JSON Schema files
+Files: schema/*.json
+Copyright: 2026 The updater-replace Authors
 License: Apache-2.0
 
 # ----------------------------------------------------------------------------

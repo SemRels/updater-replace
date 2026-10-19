@@ -1,70 +1,131 @@
-# plugin-template
+# updater-replace
 
-[![Latest Release](https://img.shields.io/github/v/release/SemRels/plugin-template?label=version&color=blue)](https://github.com/SemRels/plugin-template/releases/latest)
-[![CI](https://github.com/SemRels/plugin-template/actions/workflows/ci.yml/badge.svg)](https://github.com/SemRels/plugin-template/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/SemRels/plugin-template)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/SemRels/plugin-template/badge)](https://scorecard.dev/viewer/?uri=github.com/SemRels/plugin-template)
-[![REUSE status](https://api.reuse.software/badge/github.com/SemRels/plugin-template)](https://api.reuse.software/info/github.com/SemRels/plugin-template)
+[![Latest Release](https://img.shields.io/github/v/release/SemRels/updater-replace?label=version&color=blue)](https://github.com/SemRels/updater-replace/releases/latest)
+[![CI](https://github.com/SemRels/updater-replace/actions/workflows/ci.yml/badge.svg)](https://github.com/SemRels/updater-replace/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/SemRels/updater-replace)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/SemRels/updater-replace/badge)](https://scorecard.dev/viewer/?uri=github.com/SemRels/updater-replace)
+[![REUSE status](https://api.reuse.software/badge/github.com/SemRels/updater-replace)](https://api.reuse.software/info/github.com/SemRels/updater-replace)
 
-Template repository for SemRels plugins built as standalone Go subprocess binaries.
+Generic pre-tag updater for semrel. It replaces regular expressions or literal
+text in arbitrary project files, validates expected match counts before writing,
+and preserves file modes and existing CRLF line endings.
 
-This template reflects the current SemRels plugin architecture: semrel executes a plain Go CLI binary as a subprocess, passes plugin configuration through `SEMREL_PLUGIN_*` variables, passes release context through `SEMREL_*` variables, reads plugin output from standard output, and treats exit code `0` as success and any non-zero exit code as failure. There is no gRPC transport, no network listener, and no protobuf plumbing to wire up.
+## Configuration
 
-## What the example plugin does
+Use the plugin during `pre-tag` so the changed files are available to the
+release commit:
 
-The scaffolded example is intentionally phase-agnostic. It reads `SEMREL_VERSION` and `SEMREL_DRY_RUN`, writes the required schema handshake to standard error, and prints a confirmation message to standard output:
-
-```text
-stderr: plugin_schema_version=1
-stdout: example plugin invoked for version 1.2.3 (dry-run: false)
+```yaml
+plugins:
+  - uses: updater-replace
+    phase: pre-tag
+    args:
+      files: README.md,docs/**/*.md
+      ignore: docs/archive/**
+      from: 'version-\d+\.\d+\.\d+'
+      to: 'version-${nextRelease.version}'
+      countMatches: "true"
 ```
 
-## Plugin contract
+The flat form configures one rule. `files` and `ignore` accept comma,
+semicolon, or newline-separated patterns.
 
-| Item | Behavior |
-| --- | --- |
-| `plugin_schema_version=1` | The **first line written to stderr** must be `plugin_schema_version=1`. |
-| `SEMREL_VERSION` | Required release version for this example plugin. |
-| `SEMREL_DRY_RUN` | Optional boolean (`true`/`false`) indicating dry-run mode. |
-| `SEMREL_PLUGIN_*` | Reserved for your phase-specific plugin configuration. |
-| stdout | Write the plugin's functional output here. |
-| stderr | Write diagnostics, validation errors, and logs here. |
-| exit code | `0` means success; any non-zero code means failure. |
+| Argument | Environment variable | Description |
+|---|---|---|
+| `files` | `SEMREL_PLUGIN_FILES` | Required file patterns, including recursive `**` globs |
+| `ignore` | `SEMREL_PLUGIN_IGNORE` | Exclusion patterns |
+| `from` | `SEMREL_PLUGIN_FROM` | Required Go regular expression |
+| `to` | `SEMREL_PLUGIN_TO` | Replacement string and template |
+| `literal` | `SEMREL_PLUGIN_LITERAL` | Treat `from` as literal text |
+| `flags` | `SEMREL_PLUGIN_FLAGS` | Go regexp flags: `i`, `m`, `s`, and `U` |
+| `countMatches` | `SEMREL_PLUGIN_COUNT_MATCHES` | Include match counts in the per-file summary |
+| `replacements` | `SEMREL_PLUGIN_REPLACEMENTS` | YAML or JSON array for multiple rules |
 
-## Repository layout
+Because semrel passes each `args` value through one environment variable, use a
+YAML block scalar for structured rules:
 
-```text
-cmd/plugin/              Thin environment-variable wrapper and process entry point
-internal/plugin/         Pure, testable plugin logic with no os/env dependencies
-.github/workflows/       CI, release, security, template-sync, and semrel self-release automation
-.semrel.yaml             semrel dogfooding configuration for this repository
+```yaml
+plugins:
+  - uses: updater-replace
+    phase: pre-tag
+    args:
+      replacements: |
+        - files: ["README.md", "docs/**/*.md"]
+          ignore: ["docs/archive/**"]
+          from: 'version-\d+\.\d+\.\d+'
+          to: 'version-${nextRelease.version}'
+          countMatches: true
+          results:
+            - file: README.md
+              hasChanged: true
+              numMatches: 1
+              numReplacements: 1
+        - files: Dockerfile
+          from: '^ARG VERSION=.*$'
+          flags: m
+          to: 'ARG VERSION=${nextRelease.version}'
 ```
 
-## Use this template for a real plugin
+`files`, `ignore`, and `from` accept either a string or a list. Multiple `from`
+patterns run in order. Replacement strings use Go regexp expansion, so `$1` and
+`${name}` capture references are supported.
 
-1. Create a new repository from this template or copy it into your plugin repository.
-2. Rename the Go module in `go.mod` to `github.com/SemRels/<your-plugin-repo>`.
-3. Rename the binary/package descriptions from `plugin-template` to your plugin name.
-4. Implement your phase-specific logic in `internal/plugin/` as pure Go.
-5. Keep `cmd/plugin/main.go` thin: read `SEMREL_*` / `SEMREL_PLUGIN_*` with `os.Getenv` (or an injected `getenv` in tests), translate them into a config struct, then call the internal package.
-6. Extend the README tables with every `SEMREL_PLUGIN_*` and `SEMREL_*` variable your plugin consumes.
-7. Update `.semrel.yaml` and replace the example phase assignment comments/configuration with the plugins and phases your real plugin release process needs.
+## Templates
+
+The `to` value supports:
+
+| Template | Source |
+|---|---|
+| `${nextRelease.version}` | `SEMREL_VERSION` / `SEMREL_NEXT_VERSION` |
+| `${lastRelease.version}` | `SEMREL_CURRENT_VERSION` |
+| `${gitTag}` / `${tag}` | `SEMREL_TAG_NAME` |
+| `${channel}` / `${branch}` | `SEMREL_BRANCH` |
+| `${date}` | Current UTC date (`YYYY-MM-DD`) |
+| `${SEMREL_VERSION}` and other listed `SEMREL_*` names | Corresponding release environment variable |
+
+## Examples
+
+README badge:
+
+```yaml
+from: 'version-\d+\.\d+\.\d+'
+to: 'version-${nextRelease.version}'
+```
+
+Dockerfile:
+
+```yaml
+from: '^ARG VERSION=.*$'
+flags: m
+to: 'ARG VERSION=${nextRelease.version}'
+```
+
+Source constant:
+
+```yaml
+from: 'const Version = "[^"]+"'
+to: 'const Version = "${nextRelease.version}"'
+```
+
+## Assertions and atomic writes
+
+Every rule is evaluated in memory first. All `results` assertions must pass
+before any file is written, preventing partial updates when a regular expression
+drifts. Writes use a temporary file in the target directory followed by an
+atomic rename and retain the original permission bits.
+
+In a semrel dry run, the plugin performs matching, templating, and assertion
+validation, reports files it would update, and writes nothing.
+
+The plugin prints modified paths to stdout, one per line, and diagnostics to
+stderr. A missing file match, invalid pattern, failed assertion, or write error
+exits non-zero.
 
 ## Local development
 
 ```bash
-go build ./...
 go test ./...
-```
-
-## Example semrel configuration
-
-```yaml
-plugins:
-  - name: example-plugin
-    path: ~/.semrel/plugins/semrel-plugin-example
-    env:
-      SEMREL_PLUGIN_SAMPLE_OPTION: "value"
+go build ./cmd/plugin
 ```
 
 ## License

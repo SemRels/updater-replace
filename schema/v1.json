@@ -3,6 +3,7 @@
   "$id": "https://registry.semrel.io/schemas/plugins/updater-replace/v1.json",
   "title": "updater-replace plugin configuration",
   "description": "Schema v1 for the updater-replace semrel plugin.",
+  "x-semrel-dry-run": true,
   "type": "object",
   "properties": {
     "SEMREL_PLUGIN_REPLACEMENTS": {

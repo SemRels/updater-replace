@@ -100,6 +100,8 @@ func TestApplyDryRunPreservesCRLFAndFiles(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"version.txt"}, result.ModifiedFiles())
+	require.Contains(t, result.UnifiedDiff(), "--- a/version.txt\n+++ b/version.txt\n")
+	require.Contains(t, result.UnifiedDiff(), "-version=1\n-next=1\n+version=2\n+next=2\n")
 	content, err := os.ReadFile(filepath.Join(root, "version.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "version=1\r\nnext=1\r\n", string(content))

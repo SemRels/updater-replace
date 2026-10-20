@@ -91,6 +91,7 @@ type FileResult struct {
 	Changed         bool
 	NumMatches      int
 	NumReplacements int
+	Diff            string
 }
 
 type Result struct {
@@ -99,9 +100,10 @@ type Result struct {
 }
 
 type plannedFile struct {
-	result FileResult
-	mode   fs.FileMode
-	data   []byte
+	result  FileResult
+	mode    fs.FileMode
+	initial []byte
+	data    []byte
 }
 
 func (result Result) ModifiedFiles() []string {
@@ -112,6 +114,16 @@ func (result Result) ModifiedFiles() []string {
 		}
 	}
 	return files
+}
+
+func (result Result) UnifiedDiff() string {
+	var b strings.Builder
+	for _, file := range result.Files {
+		if file.Changed && file.Diff != "" {
+			b.WriteString(file.Diff)
+		}
+	}
+	return b.String()
 }
 
 func ParseRules(raw string, flat FlatConfig) ([]Replacement, error) {
@@ -202,9 +214,10 @@ func Apply(cfg Config) (Result, error) {
 					return Result{}, fmt.Errorf("read %s: %w", relativePath, readErr)
 				}
 				current = plannedFile{
-					result: FileResult{Path: relativePath},
-					mode:   info.Mode(),
-					data:   data,
+					result:  FileResult{Path: relativePath},
+					mode:    info.Mode(),
+					initial: append([]byte(nil), data...),
+					data:    data,
 				}
 			}
 
@@ -239,6 +252,9 @@ func Apply(cfg Config) (Result, error) {
 	result := Result{Files: make([]FileResult, 0, len(paths)), DryRun: cfg.DryRun}
 	for _, path := range paths {
 		file := planned[path]
+		if file.result.Changed {
+			file.result.Diff = UnifiedDiffBytes(path, file.initial, file.data)
+		}
 		result.Files = append(result.Files, file.result)
 	}
 

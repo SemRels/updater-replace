@@ -252,7 +252,7 @@ func Apply(cfg Config) (Result, error) {
 	result := Result{Files: make([]FileResult, 0, len(paths)), DryRun: cfg.DryRun}
 	for _, path := range paths {
 		file := planned[path]
-		if file.result.Changed {
+		if cfg.DryRun && file.result.Changed {
 			file.result.Diff = UnifiedDiffBytes(path, file.initial, file.data)
 		}
 		result.Files = append(result.Files, file.result)

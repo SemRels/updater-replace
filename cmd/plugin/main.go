@@ -49,7 +49,7 @@ func run(stdout, stderr io.Writer, getenv func(string) string) int {
 	result, err := plugin.Apply(plugin.Config{
 		Root:   root,
 		Rules:  rules,
-		DryRun: parseBool(getenv("SEMREL_DRY_RUN")),
+		DryRun: parseBool(getenv("SEMREL_DRY_RUN")) || parseBool(getenv("SEMREL_PLUGIN_DRY_RUN")),
 		Template: plugin.TemplateData{
 			NextVersion: normalizeVersion(
 				firstNonEmpty(getenv("SEMREL_VERSION"), getenv("SEMREL_NEXT_VERSION")),
@@ -74,15 +74,21 @@ func run(stdout, stderr io.Writer, getenv func(string) string) int {
 	}
 
 	for _, file := range result.Files {
+		if result.DryRun && file.Changed {
+			_, _ = fmt.Fprintf(stderr, "[dry-run] updater-replace: would update %s (matches=%d replacements=%d)\n",
+				file.Path, file.NumMatches, file.NumReplacements)
+			continue
+		}
 		action := "unchanged"
 		if file.Changed {
 			action = "updated"
 		}
-		if result.DryRun && file.Changed {
-			action = "would update"
-		}
 		_, _ = fmt.Fprintf(stderr, "updater-replace: %s %s (matches=%d replacements=%d)\n",
 			action, file.Path, file.NumMatches, file.NumReplacements)
+	}
+	if result.DryRun {
+		_, _ = io.WriteString(stdout, result.UnifiedDiff())
+		return 0
 	}
 	if len(result.ModifiedFiles()) > 0 {
 		_, _ = fmt.Fprintf(stdout, "%s\n", strings.Join(result.ModifiedFiles(), "\n"))

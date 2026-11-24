@@ -41,7 +41,7 @@ func TestRunUpdatesFile(t *testing.T) {
 
 func TestRunDryRunValidatesWithoutWriting(t *testing.T) {
 	t.Chdir(t.TempDir())
-	require.NoError(t, os.WriteFile("README.md", []byte("release-v1.0.0"), 0o644))
+	require.NoError(t, os.WriteFile("README.md", []byte("release-v1.0.0\n"), 0o644))
 
 	env := map[string]string{
 		"SEMREL_VERSION":              "v1.1.0",
@@ -56,11 +56,13 @@ func TestRunDryRunValidatesWithoutWriting(t *testing.T) {
 	var stderr bytes.Buffer
 
 	require.Equal(t, 0, run(&stdout, &stderr, envMap(env)))
-	require.Equal(t, "README.md\n", stdout.String())
-	require.Contains(t, stderr.String(), "would update README.md")
+	require.True(t, strings.HasPrefix(stderr.String(), "plugin_schema_version=1\n"))
+	require.Contains(t, stderr.String(), "[dry-run] updater-replace: would update README.md")
+	require.Contains(t, stdout.String(), "--- a/README.md\n+++ b/README.md\n")
+	require.Contains(t, stdout.String(), "-release-v1.0.0\n+release-vv1.1.0\n")
 	content, err := os.ReadFile("README.md")
 	require.NoError(t, err)
-	require.Equal(t, "release-v1.0.0", string(content))
+	require.Equal(t, "release-v1.0.0\n", string(content))
 }
 
 func TestRunReportsConfigurationError(t *testing.T) {

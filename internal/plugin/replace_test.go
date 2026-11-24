@@ -7,6 +7,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -100,9 +101,45 @@ func TestApplyDryRunPreservesCRLFAndFiles(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"version.txt"}, result.ModifiedFiles())
+	require.Contains(t, result.UnifiedDiff(), "--- a/version.txt\n+++ b/version.txt\n")
+	require.Contains(t, result.UnifiedDiff(), "-version=1\r\n-next=1\r\n+version=2\r\n+next=2\r\n")
 	content, err := os.ReadFile(filepath.Join(root, "version.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "version=1\r\nnext=1\r\n", string(content))
+}
+
+func TestApplyDiffOnlyDuringDryRun(t *testing.T) {
+	root := t.TempDir()
+	before := strings.Repeat("old\n", 20_000)
+	writeFixture(t, root, "version.txt", before, 0o644)
+	cfg := Config{
+		Root: root,
+		Rules: []Replacement{{
+			Files: StringList{"version.txt"},
+			From:  StringList{"old"},
+			To:    "new",
+		}},
+	}
+
+	result, err := Apply(cfg)
+	require.NoError(t, err)
+	require.Empty(t, result.UnifiedDiff())
+	requireFileContains(t, filepath.Join(root, "version.txt"), "new\n")
+}
+
+func TestApplyDryRunShowsRemovedFinalNewline(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "version.txt", "version\n", 0o644)
+	result, err := Apply(Config{
+		Root:   root,
+		DryRun: true,
+		Rules: []Replacement{{
+			Files: StringList{"version.txt"},
+			From:  StringList{"\n$"},
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "--- a/version.txt\n+++ b/version.txt\n@@ -1,1 +1,1 @@\n-version\n+version\n\\ No newline at end of file\n", result.UnifiedDiff())
 }
 
 func TestApplyRejectsEscapingPattern(t *testing.T) {
